@@ -1,0 +1,5 @@
+{
+    "name": "Wiki Kit Mini",
+    "home": "Welcome",
+    "notFound": "./system/not-found.md"
+}

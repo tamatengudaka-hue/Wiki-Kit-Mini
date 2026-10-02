@@ -1,0 +1,13 @@
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+wiki-kit-mini
+wiki-kit-mini.exe
+
+*.log
+*.tmp
+*.swp
+*~

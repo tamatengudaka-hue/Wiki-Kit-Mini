@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Wiki</title>
+
+    <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+    <header class="site-header">
+        <button
+            id="sidebar-toggle"
+            class="mobile-menu-button"
+            type="button"
+            aria-label="メニューを開く"
+        >
+            ☰
+        </button>
+
+        <a href="/" id="wiki-name">Wiki</a>
+
+        <a href="/?page=all" class="header-articles">
+            記事一覧
+        </a>
+
+        <div class="search-area">
+            <input
+                id="search"
+                type="search"
+                placeholder="記事を検索..."
+                autocomplete="off"
+            >
+
+            <div id="search-results"></div>
+        </div>
+
+        <button
+        id="toc-toggle"
+        class="mobile-toc-button"
+        type="button"
+        aria-label="目次を開く"
+        hidden
+    >
+        目次
+    </button>
+    </header>
+
+    <div class="wiki-layout">
+        <aside id="sidebar" class="wiki-sidebar">
+            <nav>
+                <h2>ナビゲーション</h2>
+
+                <a href="/">ホーム</a>
+                <a href="/?page=all">記事一覧</a>
+            </nav>
+
+            <section>
+                <h2>タグ</h2>
+
+                <div id="sidebar-tags"></div>
+            </section>
+
+            <section class="wiki-stats">
+                <h2>Wiki情報</h2>
+
+                <p>
+                    <span id="article-count">0</span> 記事
+                </p>
+
+                <p>
+                    <span id="tag-count">0</span> タグ
+                </p>
+            </section>
+        </aside>
+
+        <main id="article">
+            <p>Loading...</p>
+        </main>
+
+        <aside
+        id="toc-panel"
+        class="toc-panel"
+        hidden
+        ></aside>
+    </div>
+
+    <div id="mobile-backdrop" class="mobile-backdrop"></div>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
