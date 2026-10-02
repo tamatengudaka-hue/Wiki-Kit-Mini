@@ -89,6 +89,34 @@ function getHashTarget() {
     }
 }
 
+// 内部リンクのURLを作成する関数
+
+function createInternalUrl({
+    page = null,
+    tag = null,
+    heading = null
+} = {}) {
+    const url = new URL(location.href);
+
+    // 現在の ?page=... や ?tag=...、#見出しを引き継がない
+    url.search = "";
+    url.hash = "";
+
+    if (page) {
+        url.searchParams.set("page", page);
+    }
+
+    if (tag) {
+        url.searchParams.set("tag", tag);
+    }
+
+    if (heading) {
+        url.hash = encodeURIComponent(heading);
+    }
+
+    return url.href;
+}
+
 // 設定・記事一覧
 
 async function loadConfig() {
@@ -238,15 +266,10 @@ function createWikiLinks(root, articles) {
             const link =
                 document.createElement("a");
 
-            let href =
-                `/?page=${encodeURIComponent(pageName)}`;
-
-            if (heading) {
-                href +=
-                    `#${encodeURIComponent(heading)}`;
-            }
-
-            link.href = href;
+            link.href = createInternalUrl({
+                page: pageName,
+                heading
+            });
             link.textContent = label;
 
             // 関連リンク抽出にも使用
@@ -342,7 +365,9 @@ function setupSearch(articles) {
 
         for (const item of matches) {
             const link = document.createElement("a");
-            link.href = `/?page=${encodeURIComponent(item.title)}`;
+            link.href = createInternalUrl({
+                page: item.title
+            });
 
             const title = document.createElement("strong");
             title.textContent = item.title;
@@ -392,7 +417,9 @@ function createArticleTags(title, articles) {
         const element = document.createElement("a");
 
         element.className = "article-tag";
-        element.href = `/?tag=${encodeURIComponent(tag)}`;
+        element.href = createInternalUrl({
+            tag
+        });
         element.textContent = tag;
 
         container.appendChild(element);
@@ -600,8 +627,9 @@ async function createLinkInfo(title, articles) {
             type: "wiki",
             direction: "out",
             label: linkedTitle,
-            href:
-                `/?page=${encodeURIComponent(linkedTitle)}`
+            href: createInternalUrl({
+                page: linkedTitle
+            })
         });
     }
 
@@ -654,8 +682,9 @@ async function createLinkInfo(title, articles) {
             type: "wiki",
             direction: "in",
             label: item.title,
-            href:
-                `/?page=${encodeURIComponent(item.title)}`
+            href: createInternalUrl({
+                page: item.title
+            })
         });
     }
 
@@ -932,8 +961,9 @@ function showArticleList(articles, config) {
         const link = document.createElement("a");
 
         link.className = "article-list-title";
-        link.href =
-            `/?page=${encodeURIComponent(item.title)}`;
+        link.href = createInternalUrl({
+            page: item.title
+        });
         link.textContent = item.title;
 
         entry.appendChild(link);
@@ -948,8 +978,9 @@ function showArticleList(articles, config) {
                 const tagLink =
                     document.createElement("a");
 
-                tagLink.href =
-                    `/?tag=${encodeURIComponent(tag)}`;
+                tagLink.href = createInternalUrl({
+                    tag
+                });
 
                 tagLink.textContent = tag;
 
@@ -1017,8 +1048,9 @@ function showTagPage(tag, articles, config) {
         const link =
             document.createElement("a");
 
-        link.href =
-            `/?page=${encodeURIComponent(item.title)}`;
+        link.href = createInternalUrl({
+            page: item.title
+        });
 
         link.textContent = item.title;
 
@@ -1081,8 +1113,9 @@ function showDefaultHome(articles, config) {
         const link =
             document.createElement("a");
 
-        link.href =
-            `/?page=${encodeURIComponent(item.title)}`;
+            link.href = createInternalUrl({
+                page: item.title
+            });
 
         link.textContent = item.title;
 
@@ -1094,7 +1127,9 @@ function showDefaultHome(articles, config) {
         document.createElement("a");
 
     allArticles.className = "home-all-articles";
-    allArticles.href = "/?page=all";
+    allArticles.href = createInternalUrl({
+        page: "all"
+    });
     allArticles.textContent =
         "すべての記事を見る →";
 
@@ -1157,8 +1192,9 @@ function setupSidebar(articles) {
     for (const tag of tags) {
         const link = document.createElement("a");
 
-        link.href =
-            `/?tag=${encodeURIComponent(tag)}`;
+        link.href = createInternalUrl({
+            tag
+        });
 
         link.textContent = tag;
 
