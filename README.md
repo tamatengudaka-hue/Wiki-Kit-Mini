@@ -13,6 +13,12 @@ Markdownで手軽に作れる、小規模な個人Wiki向けの軽量Wikiソフ�
 > 現在は開発初期版です。  
 > 今後、仕様変更や破壊的変更が行われる可能性があります。
 
+## Demo
+
+GitHub Pagesで実際に動作しているWiki Kit Miniを試せます。
+
+[Live Demo](https://tamatengudaka-hue.github.io/Wiki-Kit-Mini/)
+
 ---
 
 ## Features
@@ -69,15 +75,16 @@ Goサーバーはデフォルトでlocalhostのみ待ち受けます。
 
 例:
 
+- GitHub Pages
 - Cloudflare Pages
 - Nginx
 - Apache
 - その他の静的Webサーバー
 
+GitHub Pagesのプロジェクトサイトなど、サブディレクトリ配下への配置にも対応しています。
+
 `file://` から直接 `index.html` を開くのではなく、HTTPサーバー経由で利用してください。
 
-> [!NOTE]
-> GitHub Pagesなど、サブディレクトリ配下に配置される環境ではパスの調整が必要になる場合があります。
 
 ---
 
@@ -428,7 +435,7 @@ Wiki名です。
 
 「{{title}}」という記事はまだ作成されていません。
 
-[記事一覧へ戻る](/?page=all)
+[記事一覧へ戻る](?page=all)
 ```
 
 `{{title}}` にはアクセスされた記事名が入ります。
