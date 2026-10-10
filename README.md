@@ -45,6 +45,7 @@ GitHub Pagesで実際に動作しているWiki Kit Miniを試せます。
 - コードコピー
 - PC向け3カラムレイアウト
 - モバイル対応
+- ダークモード（OS設定への追従・手動切り替え）
 - カスタムHome
 - カスタム未作成記事ページ
 - Go製の簡易Webサーバー
@@ -270,6 +271,7 @@ go run server.go
 python3 tests/split_articles.py
 python3 tests/ui_regressions.py
 python3 tests/code_blocks.py
+python3 tests/themes.py
 ```
 
 Chromiumの場所が異なる場合は `CHROMIUM_PATH` を指定してください
@@ -457,6 +459,17 @@ PCでは右側に表示され、スクロール位置に応じて現在の見出
 ---
 
 ## Configuration
+
+### 表示の配色
+
+ヘッダーの配色ボタンで「自動 → ライト → ダーク → 自動」の順に切り替えられます。
+初期値の「自動」はOS・ブラウザの配色設定に追従します。
+手動で選んだ配色はOS設定より優先されます。
+選択はブラウザの `localStorage` に保存され、再読み込み後も維持されます。
+保存が禁止されている場合でも、そのページ内での切り替えは利用できます。
+記事や `config.json` に配色の設定を記述する必要はありません。
+
+### Wikiの設定
 
 Wiki全体の設定は `config.json` で行います。
 
