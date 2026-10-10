@@ -30,6 +30,7 @@ Publish the files on a static host, or run the included Go server locally.
 - Stable article IDs, title aliases and compatible legacy URLs
 - Automatic, light and dark color themes
 - Japanese and English UI, with optional article translations
+- Page-specific descriptions, Open Graph metadata and canonical URLs
 - Custom home and missing-article pages
 - A small Go HTTP server
 
@@ -69,6 +70,7 @@ Python and Playwright are used only for optional browser regression tests. Neith
 ├── src/
 │   ├── main.js
 │   ├── i18n.js
+│   ├── metadata.js
 │   ├── theme.js
 │   └── style.css
 ├── system/
@@ -324,6 +326,22 @@ No automatic translation service or API key is required.
 
 The supplied Welcome and split demo both have English translations.
 
+## Page metadata
+
+JavaScript updates the page title, description, Open Graph title/description/site name/type/URL/locale,
+X (Twitter) summary-card title/description, and canonical URL for the current home, article, article list or tag page.
+Missing-article and error views update their metadata as well.
+
+Descriptions are generated from the rendered contents and limited to 160 Unicode code points.
+Headings, fenced code, copy buttons, tags and related links are excluded.
+Split articles use all their parts, and language changes update descriptions from the translated contents.
+Canonical URLs use stable article IDs and omit heading fragments and unrelated query parameters.
+Repeated updates do not create duplicate tags.
+
+These updates happen after JavaScript runs in the browser.
+Social crawlers that do not execute JavaScript receive the initial metadata in `index.html`.
+Reliable per-article social cards require static HTML generation or server-rendered metadata separately.
+
 ## Custom missing-article pages
 
 Edit `system/not-found.md`, or the template selected for the current language:
@@ -350,6 +368,7 @@ python3 tests/code_blocks.py
 python3 tests/themes.py
 python3 tests/navigation_search.py
 python3 tests/languages.py
+python3 tests/metadata.py
 ```
 
 The default Chromium executable is `/usr/bin/chromium`; override it with `CHROMIUM_PATH` if needed.

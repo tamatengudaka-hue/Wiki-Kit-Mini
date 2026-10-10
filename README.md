@@ -49,6 +49,7 @@ GitHub Pagesで実際に動作しているWiki Kit Miniを試せます。
 - モバイル対応
 - ダークモード（OS設定への追従・手動切り替え）
 - 日本語・英語UIと任意の記事翻訳
+- 表示ページに合わせた説明文・OGPメタ情報
 - カスタムHome
 - カスタム未作成記事ページ
 - Go製の簡易Webサーバー
@@ -112,6 +113,7 @@ GitHub Pagesのプロジェクトサイトなど、サブディレクトリ配�
 ├─ src/
 │  ├─ main.js
 │  ├─ i18n.js
+│  ├─ metadata.js
 │  ├─ theme.js
 │  └─ style.css
 │
@@ -282,6 +284,7 @@ python3 tests/code_blocks.py
 python3 tests/themes.py
 python3 tests/navigation_search.py
 python3 tests/languages.py
+python3 tests/metadata.py
 ```
 
 Chromiumの場所が異なる場合は `CHROMIUM_PATH` を指定してください
@@ -632,6 +635,28 @@ Wiki名です。
 ```json
 "notFound": "./system/not-found.md"
 ```
+
+---
+
+## ページのメタ情報
+
+表示したホーム・記事・記事一覧・タグページに合わせて、JavaScriptで次の情報を更新します。
+
+- ページタイトルと `description`
+- OGPのタイトル・説明・サイト名・ページ種別・URL・言語
+- X（旧Twitter）向けのカード種別・タイトル・説明
+- `canonical` の正規URL
+
+説明文は表示中の本文から最大160文字で生成します。
+見出し・コードブロック・コピーボタン・タグ・関連記事などは除外します。
+分割記事は全Markdownを対象にし、言語を切り替えると翻訳後の内容に更新します。
+URLには固定IDを使用し、見出しのフラグメントや追跡パラメータは含めません。
+繰り返し更新しても同じ種類のメタタグを重複作成しません。
+未作成記事や読み込みエラーの表示でも、その内容に更新します。
+
+これはブラウザでJavaScript実行後に更新する機能です。
+JavaScriptを実行しないSNSクローラーは `index.html` の初期メタ情報を読み取ります。
+SNSで記事ごとのカード表示を確実にするには、静的HTML生成やサーバー側でのメタ情報出力が別途必要です。
 
 ---
 

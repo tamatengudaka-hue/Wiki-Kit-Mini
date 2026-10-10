@@ -1,3 +1,4 @@
+import { summarizeArticle, updateMetadata } from "./metadata.js";
 import { t, initializeLanguage, localizeArticles, language } from "./i18n.js";
 import { marked } from "../vendor/marked.esm.js";
 import hljs from "../vendor/highlight.min.js";
@@ -117,6 +118,22 @@ function createInternalUrl({
     }
 
     return url.href;
+}
+
+// 表示内容から、各ページのhead情報を更新する。
+function updatePageMetadata(title, config, type = "website") {
+    const params = new URLSearchParams(location.search);
+    const currentPage = params.get("page");
+    const url = createInternalUrl(currentPage
+        ? { page: currentPage }
+        : params.has("tag") ? { tag: params.get("tag") } : {});
+    updateMetadata({
+        title,
+        siteName: config.name,
+        description: summarizeArticle(article) || title,
+        url,
+        type
+    });
 }
 
 // 設定・記事一覧
@@ -1034,8 +1051,7 @@ async function showNotFound(
         article.appendChild(heading);
         article.appendChild(message);
 
-        document.title =
-            `${title} - ${config.name}`;
+        updatePageMetadata(`${title} - ${config.name}`, config);
 
         return;
     }
@@ -1055,7 +1071,7 @@ async function showNotFound(
     replaceTemplateTitle(title);
     createWikiLinks(article, articles);
 
-    document.title = `${title} - ${config.name}`;
+    updatePageMetadata(`${title} - ${config.name}`, config);
 }
 
 // テンプレート内のタイトルを置換
@@ -1170,7 +1186,7 @@ async function showArticle(
         }
     }
 
-    document.title = `${title} - ${config.name}`;
+    updatePageMetadata(`${title} - ${config.name}`, config, page ? "article" : "website");
     await createLinkInfo(title, articles);
 }
 
@@ -1235,8 +1251,7 @@ function showArticleList(articles, config) {
     article.appendChild(count);
     article.appendChild(list);
 
-    document.title =
-        `${t("記事一覧")} - ${config.name}`;
+    updatePageMetadata(`${t("記事一覧")} - ${config.name}`, config);
 }
 
 
@@ -1267,8 +1282,7 @@ function showTagPage(tag, articles, config) {
 
         article.appendChild(message);
 
-        document.title =
-            `${t("タグ: {tag}", {tag})} - ${config.name}`;
+        updatePageMetadata(`${t("タグ: {tag}", {tag})} - ${config.name}`, config);
 
         return;
     }
@@ -1299,8 +1313,7 @@ function showTagPage(tag, articles, config) {
     article.appendChild(count);
     article.appendChild(list);
 
-    document.title =
-        `${t("タグ: {tag}", {tag})} - ${config.name}`;
+    updatePageMetadata(`${t("タグ: {tag}", {tag})} - ${config.name}`, config);
 }
 
 
@@ -1330,7 +1343,7 @@ function showDefaultHome(articles, config) {
 
         article.appendChild(message);
 
-        document.title = config.name;
+        updatePageMetadata(config.name, config);
         return;
     }
 
@@ -1376,7 +1389,7 @@ function showDefaultHome(articles, config) {
     article.appendChild(list);
     article.appendChild(allArticles);
 
-    document.title = config.name;
+    updatePageMetadata(config.name, config);
 }
 
 async function showHome(articles, config) {
@@ -1526,6 +1539,7 @@ function displayError(error) {
     const message = document.createElement("p");
     message.textContent = error.message;
     article.replaceChildren(heading, message);
+    updatePageMetadata(`${heading.textContent} - ${wikiName.textContent}`, { name: wikiName.textContent });
 }
 
 async function renderPage(config, baseArticles) {
@@ -1542,6 +1556,7 @@ async function renderPage(config, baseArticles) {
     const loading = document.createElement("p");
     loading.textContent = t("読み込み中...");
     article.replaceChildren(loading);
+    updatePageMetadata(`${loading.textContent} - ${config.name}`, config);
     wikiName.textContent = config.name;
     setupSidebar(articleEntries);
     config = { ...config, notFound: config.notFoundTranslations?.[language()] ?? config.notFound };
