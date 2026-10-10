@@ -1,3 +1,4 @@
+import { t, initializeLanguage, localizeArticles, language } from "./i18n.js";
 import { marked } from "../vendor/marked.esm.js";
 import hljs from "../vendor/highlight.min.js";
 import DOMPurify from "../vendor/purify.es.mjs";
@@ -32,6 +33,7 @@ const headerObserver = new ResizeObserver(() => {
 headerObserver.observe(siteHeader);
 
 let articleEntries = [];
+let renderVersion = 0;
 let searchIndex = null;
 let activeSearchResult = -1;
 let searchRequestId = 0;
@@ -103,7 +105,7 @@ function createInternalUrl({
 
     if (page) {
         const target = page === "all" ? null : findArticle(articleEntries, page);
-        url.searchParams.set("page", target?.id ?? page);
+        url.searchParams.set("page", target?.id ?? target?.urlKey ?? page);
     }
 
     if (tag) {
@@ -123,7 +125,7 @@ async function loadConfig() {
     const response = await fetch("./config.json");
 
     if (!response.ok) {
-        throw new Error("設定ファイルの読み込みに失敗しました");
+        throw new Error(t("設定ファイルの読み込みに失敗しました"));
     }
 
     return await response.json();
@@ -133,7 +135,7 @@ async function loadArticleList() {
     const response = await fetch("./content/articles.json");
 
     if (!response.ok) {
-        throw new Error("記事一覧の読み込みに失敗しました");
+        throw new Error(t("記事一覧の読み込みに失敗しました"));
     }
 
     const articles = await response.json();
@@ -143,29 +145,42 @@ async function loadArticleList() {
 
 function findArticle(articles, reference) {
     return articles.find(item => item.id === reference)
-        ?? articles.find(item => item.title === reference || item.aliases?.includes(reference));
+        ?? articles.find(item => item.title === reference || item.sourceTitle === reference || item.aliases?.includes(reference));
 }
 
 function validateArticleList(articles) {
-    if (!Array.isArray(articles)) throw new Error("記事一覧は配列にしてください");
+    if (!Array.isArray(articles)) throw new Error(t("記事一覧は配列にしてください"));
     const references = new Map();
     for (const item of articles) {
         if (!item || typeof item.title !== "string" || !item.title.trim()
             || typeof item.file !== "string" || !item.file) {
-            throw new Error("記事には空でない title と file が必要です");
+            throw new Error(t("記事には空でない title と file が必要です"));
         }
         if (item.id !== undefined && (typeof item.id !== "string"
             || !/^[a-z0-9][a-z0-9_-]*$/.test(item.id))) {
-            throw new Error(`${item.title}: id は小文字の英数字・ハイフン・アンダースコアで指定してください`);
+            throw new Error(t("{title}: id は小文字の英数字・ハイフン・アンダースコアで指定してください", {title: item.title}));
         }
         if (item.aliases !== undefined && (!Array.isArray(item.aliases)
             || item.aliases.some(alias => typeof alias !== "string" || !alias.trim()))) {
-            throw new Error(`${item.title}: aliases は空でない文字列の配列にしてください`);
+            throw new Error(t("{title}: aliases は空でない文字列の配列にしてください", {title: item.title}));
         }
-        for (const reference of [item.title, item.id, ...(item.aliases ?? [])].filter(value => value !== undefined)) {
-            if (reference === "all") throw new Error(`${item.title}: all は記事一覧用の予約名です`);
+        if (item.translations !== undefined && (!item.translations || typeof item.translations !== "object"
+            || Array.isArray(item.translations))) {
+            throw new Error(t("{title}: translations は言語ごとの設定オブジェクトにしてください", {title: item.title}));
+        }
+        const translatedTitles = [];
+        for (const translation of Object.values(item.translations ?? {})) {
+            if (!translation || typeof translation !== "object" || Array.isArray(translation)
+                || typeof translation.file !== "string" || !translation.file
+                || (translation.title !== undefined && (typeof translation.title !== "string" || !translation.title.trim()))) {
+                throw new Error(t("{title}: 翻訳には file と任意の空でない title を指定してください", {title: item.title}));
+            }
+            if (translation.title) translatedTitles.push(translation.title);
+        }
+        for (const reference of [item.title, item.id, ...(item.aliases ?? []), ...translatedTitles].filter(value => value !== undefined)) {
+            if (reference === "all") throw new Error(t("{title}: all は記事一覧用の予約名です", {title: item.title}));
             if (references.has(reference) && references.get(reference) !== item) {
-                throw new Error(`記事のID・タイトル・別名が重複しています: ${reference}`);
+                throw new Error(t("記事のID・タイトル・別名が重複しています: {reference}", {reference: reference}));
             }
             references.set(reference, item);
         }
@@ -180,7 +195,7 @@ function contentUrl(path, base = new URL("./content/", location.href)) {
         || /[\\:%?#]/.test(path)
         || path.startsWith("/")
         || path.split("/").some(part => !part || part === "." || part === "..")) {
-        throw new Error(`記事のファイルパスが不正です: ${path}`);
+        throw new Error(t("記事のファイルパスが不正です: {path}", {path: path}));
     }
     return new URL(path.split("/").map(encodeURIComponent).join("/"), base);
 }
@@ -190,10 +205,10 @@ async function fetchArticleFile(url) {
     try {
         response = await fetch(url);
     } catch {
-        throw new Error(`${decodeURIComponent(url.pathname)} の読み込みに失敗しました（通信エラー）`);
+        throw new Error(t("{file} の読み込みに失敗しました（通信エラー）", {file: decodeURIComponent(url.pathname)}));
     }
     if (!response.ok) {
-        throw new Error(`${decodeURIComponent(url.pathname)} の読み込みに失敗しました（HTTP ${response.status}）`);
+        throw new Error(t("{file} の読み込みに失敗しました（HTTP {status}）", {file: decodeURIComponent(url.pathname), status: response.status}));
     }
     return response.text();
 }
@@ -206,32 +221,32 @@ function loadArticleData(item) {
                 return { split: false, rows: [[{ markdown: await fetchArticleFile(url), url }]] };
             }
             if (!url.pathname.endsWith("/config.json")) {
-                throw new Error("記事は .md またはディレクトリ内の config.json を指定してください");
+                throw new Error(t("記事は .md またはディレクトリ内の config.json を指定してください"));
             }
             let layout;
             const text = await fetchArticleFile(url);
             try {
                 layout = JSON.parse(text);
             } catch {
-                throw new Error(`${item.file}: JSONの形式が不正です`);
+                throw new Error(t("{file}: JSONの形式が不正です", {file: item.file}));
             }
             if (!layout || !Array.isArray(layout.rows) || !layout.rows.length
                 || layout.rows.some(row => !Array.isArray(row) || row.length < 1 || row.length > 2)) {
-                throw new Error(`${item.file}: rows は1〜2ファイルの行を並べた空でない配列にしてください`);
+                throw new Error(t("{file}: rows は1〜2ファイルの行を並べた空でない配列にしてください", {file: item.file}));
             }
             const files = layout.rows.flat();
             if (files.length > 5) {
-                throw new Error(`${item.file}: 分割記事は最大5ファイルです`);
+                throw new Error(t("{file}: 分割記事は最大5ファイルです", {file: item.file}));
             }
             const urls = files.map(file => {
                 const partUrl = contentUrl(file, new URL("./", url));
                 if (!partUrl.pathname.endsWith(".md")) {
-                    throw new Error(`${item.file}: Markdown（.md）のみ指定できます`);
+                    throw new Error(t("{file}: Markdown（.md）のみ指定できます", {file: item.file}));
                 }
                 return partUrl;
             });
             if (new Set(urls.map(url => url.href)).size !== urls.length) {
-                throw new Error(`${item.file}: 同じMarkdownファイルを重複して指定できません`);
+                throw new Error(t("{file}: 同じMarkdownファイルを重複して指定できません", {file: item.file}));
             }
             const parts = await Promise.all(urls.map(async url => ({
                 url, markdown: await fetchArticleFile(url)
@@ -481,7 +496,7 @@ function selectSearchResult(index) {
     }
 }
 
-function setupSearch(articles) {
+function setupSearch() {
     let composing = false;
     search.addEventListener("compositionstart", () => {
         composing = true;
@@ -509,7 +524,7 @@ function setupSearch(articles) {
             event.preventDefault();
             reopenSearch();
             const requestId = searchRequestId;
-            await buildSearchIndex(articles);
+            await buildSearchIndex(articleEntries);
             if (requestId !== searchRequestId) return;
         }
         const links = [...searchResults.querySelectorAll("a[role=option]")];
@@ -530,7 +545,7 @@ function setupSearch(articles) {
         const query = search.value.trim().toLowerCase();
         clearSearchResults();
         if (!query || composing || event.isComposing) return;
-        const index = await buildSearchIndex(articles);
+        const index = await buildSearchIndex(articleEntries);
         if (requestId !== searchRequestId) return;
         clearSearchResults();
         const failures = index.filter(item => item.error);
@@ -551,14 +566,14 @@ function setupSearch(articles) {
         const options = document.createElement("div");
         options.id = "search-options";
         options.setAttribute("role", "listbox");
-        options.setAttribute("aria-label", "検索結果");
+        options.setAttribute("aria-label", t("検索結果"));
         searchResults.appendChild(options);
         const status = document.createElement("p");
         status.className = "search-status";
         status.setAttribute("role", "status");
         status.textContent = matches.length
-            ? `${matches.length}件の記事が見つかりました`
-            : "一致する記事が見つかりませんでした";
+            ? t("{count}件の記事が見つかりました", {count: matches.length})
+            : t("一致する記事が見つかりませんでした");
         searchResults.appendChild(status);
         matches.forEach((item, position) => {
             const link = document.createElement("a");
@@ -654,7 +669,7 @@ function createTableContainers() {
         container.className = "article-table";
         container.tabIndex = 0;
         container.setAttribute("role", "region");
-        container.setAttribute("aria-label", "表（横にスクロールできます）");
+        container.setAttribute("aria-label", t("表（横にスクロールできます）"));
         table.replaceWith(container);
         container.appendChild(table);
     }
@@ -682,19 +697,21 @@ function createCodeCopyButtons() {
 
         const button = document.createElement("button");
 
+        const version = renderVersion;
         button.className = "code-copy";
         button.type = "button";
-        button.textContent = "コピー";
+        button.textContent = t("コピー");
 
         button.addEventListener("click", async () => {
             await navigator.clipboard.writeText(
                 code.textContent
             );
 
-            button.textContent = "コピー済み";
+            if (version !== renderVersion) return;
+            button.textContent = t("コピー済み");
 
             setTimeout(() => {
-                button.textContent = "コピー";
+                button.textContent = t("コピー");
             }, 1500);
         });
 
@@ -725,7 +742,7 @@ function createTableOfContents() {
 
     const title = document.createElement("div");
     title.className = "toc-title";
-    title.textContent = "目次";
+    title.textContent = t("目次");
 
     const list = document.createElement("ul");
     const usedIds = new Set(
@@ -809,8 +826,10 @@ function createTableOfContents() {
 // 関連リンク
 
 async function createLinkInfo(title, articles) {
+    const version = renderVersion;
     const index = await buildSearchIndex(articles);
 
+    if (version !== renderVersion) return;
     const current = index.find(
         item => item.title === title
     );
@@ -918,7 +937,7 @@ async function createLinkInfo(title, articles) {
     const heading =
         document.createElement("h2");
 
-    heading.textContent = "関連リンク";
+    heading.textContent = t("関連リンク");
 
     section.appendChild(heading);
 
@@ -955,7 +974,7 @@ async function createLinkInfo(title, articles) {
         const externalHeading =
             document.createElement("h3");
 
-        externalHeading.textContent = "外部";
+        externalHeading.textContent = t("外部");
 
         section.appendChild(externalHeading);
         section.appendChild(
@@ -1000,6 +1019,7 @@ async function showNotFound(
     articles,
     config
 ) {
+    const version = renderVersion;
     hideTableOfContents();
     if (!config.notFound) {
         article.innerHTML = "";
@@ -1009,7 +1029,7 @@ async function showNotFound(
 
         const message = document.createElement("p");
         message.textContent =
-            "この記事はまだ作成されていません。";
+            t("この記事はまだ作成されていません。");
 
         article.appendChild(heading);
         article.appendChild(message);
@@ -1024,12 +1044,12 @@ async function showNotFound(
 
     if (!response.ok) {
         throw new Error(
-            "未作成記事ページの読み込みに失敗しました"
+            t("未作成記事ページの読み込みに失敗しました")
         );
     }
 
     const markdown = await response.text();
-
+    if (version !== renderVersion) return;
     article.innerHTML = renderMarkdown(markdown);
 
     replaceTemplateTitle(title);
@@ -1087,6 +1107,7 @@ async function showArticle(
     articles,
     config
 ) {
+    const version = renderVersion;
     const data = findArticle(articles, title);
 
     if (!data) {
@@ -1104,6 +1125,7 @@ async function showArticle(
         history.replaceState(null, "", createInternalUrl({ page: data.id, heading: getHashTarget() }));
     }
     const loaded = await loadArticleData(data);
+    if (version !== renderVersion) return;
     article.replaceChildren();
     if (loaded.split) {
         const heading = document.createElement("h1");
@@ -1161,11 +1183,11 @@ function showArticleList(articles, config) {
     article.innerHTML = "";
 
     const title = document.createElement("h1");
-    title.textContent = "記事一覧";
+    title.textContent = t("記事一覧");
 
     const count = document.createElement("p");
     count.textContent =
-        `全${articles.length}記事`;
+        t("全{count}記事", {count: articles.length});
 
     const list = document.createElement("div");
     list.className = "article-list";
@@ -1214,7 +1236,7 @@ function showArticleList(articles, config) {
     article.appendChild(list);
 
     document.title =
-        `記事一覧 - ${config.name}`;
+        `${t("記事一覧")} - ${config.name}`;
 }
 
 
@@ -1234,26 +1256,26 @@ function showTagPage(tag, articles, config) {
     article.innerHTML = "";
 
     const title = document.createElement("h1");
-    title.textContent = `タグ: ${tag}`;
+    title.textContent = t("タグ: {tag}", {tag: tag});
 
     article.appendChild(title);
 
     if (matches.length === 0) {
         const message = document.createElement("p");
         message.textContent =
-            "このタグの記事はありません。";
+            t("このタグの記事はありません。");
 
         article.appendChild(message);
 
         document.title =
-            `タグ: ${tag} - ${config.name}`;
+            `${t("タグ: {tag}", {tag})} - ${config.name}`;
 
         return;
     }
 
     const count = document.createElement("p");
     count.textContent =
-        `${matches.length}件の記事`;
+        t("{count}件の記事", {count: matches.length});
 
     const list = document.createElement("ul");
 
@@ -1278,7 +1300,7 @@ function showTagPage(tag, articles, config) {
     article.appendChild(list);
 
     document.title =
-        `タグ: ${tag} - ${config.name}`;
+        `${t("タグ: {tag}", {tag})} - ${config.name}`;
 }
 
 
@@ -1294,7 +1316,7 @@ function showDefaultHome(articles, config) {
 
     const welcome = document.createElement("p");
     welcome.textContent =
-        `${config.name}へようこそ。`;
+        t("{name}へようこそ。", {name: config.name});
 
     article.appendChild(title);
     article.appendChild(welcome);
@@ -1304,7 +1326,7 @@ function showDefaultHome(articles, config) {
             document.createElement("p");
 
         message.textContent =
-            "まだ記事はありません。";
+            t("まだ記事はありません。");
 
         article.appendChild(message);
 
@@ -1314,10 +1336,10 @@ function showDefaultHome(articles, config) {
 
     const count = document.createElement("p");
     count.textContent =
-        `現在 ${articles.length} 件の記事があります。`;
+        t("現在 {count} 件の記事があります。", {count: articles.length});
 
     const heading = document.createElement("h2");
-    heading.textContent = "記事";
+    heading.textContent = t("記事");
 
     const list = document.createElement("ul");
     list.className = "home-article-list";
@@ -1347,7 +1369,7 @@ function showDefaultHome(articles, config) {
         page: "all"
     });
     allArticles.textContent =
-        "すべての記事を見る →";
+        t("すべての記事を見る →");
 
     article.appendChild(count);
     article.appendChild(heading);
@@ -1397,7 +1419,7 @@ function setupSidebar(articles) {
             )
         )
     ].sort(
-        (a, b) => a.localeCompare(b, "ja")
+        (a, b) => a.localeCompare(b, language())
     );
 
     articleCount.textContent = articles.length;
@@ -1495,51 +1517,51 @@ window.matchMedia("(max-width: 900px)").addEventListener("change", closeMobilePa
 
 // 起動
 
-async function main() {
-    const config = await loadConfig();
-    const articles = await loadArticleList();
-
-    articleEntries = articles;
-    wikiName.textContent = config.name;
-
-    setupSearch(articles);
-    setupSidebar(articles);
-
-    if (page === "all") {
-        showArticleList(articles, config);
-        return;
-    }
-
-    if (page) {
-        await showArticle(
-            page,
-            articles,
-            config
-        );
-
-        return;
-    }
-
-    if (tag) {
-        showTagPage(
-            tag,
-            articles,
-            config
-        );
-
-        return;
-    }
-
-    await showHome(articles, config);
-}
-
-main().catch(error => {
+function displayError(error) {
     console.error(error);
-
+    document.documentElement.removeAttribute("data-language-pending");
     hideTableOfContents();
     const heading = document.createElement("h1");
-    heading.textContent = "読み込みに失敗しました";
+    heading.textContent = t("読み込みに失敗しました");
     const message = document.createElement("p");
     message.textContent = error.message;
     article.replaceChildren(heading, message);
-});
+}
+
+async function renderPage(config, baseArticles) {
+    const version = ++renderVersion;
+    searchRequestId++;
+    searchIndex = null;
+    clearSearchResults();
+    const restoreFocus = sidebar.classList.contains("open")
+        && document.activeElement.id === "language-select";
+    closeMobilePanels();
+    if (restoreFocus) sidebarToggle.focus();
+    hideTableOfContents();
+    articleEntries = localizeArticles(baseArticles);
+    const loading = document.createElement("p");
+    loading.textContent = t("読み込み中...");
+    article.replaceChildren(loading);
+    wikiName.textContent = config.name;
+    setupSidebar(articleEntries);
+    config = { ...config, notFound: config.notFoundTranslations?.[language()] ?? config.notFound };
+    try {
+        if (page === "all") showArticleList(articleEntries, config);
+        else if (page) await showArticle(page, articleEntries, config);
+        else if (tag) showTagPage(tag, articleEntries, config);
+        else await showHome(articleEntries, config);
+    } catch (error) {
+        if (version === renderVersion) displayError(error);
+    }
+}
+
+async function main() {
+    const config = await loadConfig();
+    initializeLanguage(config);
+    const articles = await loadArticleList();
+    setupSearch();
+    document.addEventListener("wiki-language-change", () => renderPage(config, articles));
+    await renderPage(config, articles);
+}
+
+main().catch(displayError);

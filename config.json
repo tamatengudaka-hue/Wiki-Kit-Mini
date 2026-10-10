@@ -1,5 +1,9 @@
 {
     "name": "Wiki Kit Mini",
     "home": "auto",
-    "notFound": "./system/not-found.md"
+    "notFound": "./system/not-found.md",
+    "language": "ja",
+    "notFoundTranslations": {
+        "en": "./system/en/not-found.md"
+    }
 }

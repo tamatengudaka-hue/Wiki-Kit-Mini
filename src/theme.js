@@ -2,7 +2,8 @@
 (() => {
     const storageKey = "wiki-kit-mini-theme";
     const modes = ["auto", "light", "dark"];
-    const labels = { auto: "自動", light: "ライト", dark: "ダーク" };
+    const labelsJa = { auto: "自動", light: "ライト", dark: "ダーク" };
+    const labelsEn = { auto: "Auto", light: "Light", dark: "Dark" };
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const validMode = value => modes.includes(value) ? value : "auto";
     let mode = "auto";
@@ -17,14 +18,20 @@
         document.documentElement.dataset.theme = theme;
         const button = document.getElementById("theme-toggle");
         if (button) {
+            const english = document.documentElement.lang === "en";
+            const labels = english ? labelsEn : labelsJa;
+            document.querySelector(".theme-prefix").textContent = english ? "Theme: " : "配色：";
             const next = modes[(modes.indexOf(mode) + 1) % modes.length];
             document.getElementById("theme-label").textContent = labels[mode];
-            const description = `配色：${labels[mode]}。${labels[next]}に切り替える`;
+            const description = english
+                ? `Theme: ${labels[mode]}. Switch to ${labels[next]}`
+                : `配色：${labels[mode]}。${labels[next]}に切り替える`;
             button.setAttribute("aria-label", description);
             button.title = description;
         }
     }
 
+    document.addEventListener("wiki-language-ui", applyTheme);
     applyTheme();
     systemTheme.addEventListener("change", applyTheme);
     window.addEventListener("storage", event => {

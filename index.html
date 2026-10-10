@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-language-pending>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,7 +15,7 @@
             id="sidebar-toggle"
             class="mobile-menu-button"
             type="button"
-            aria-label="メニューを開く"
+            aria-label="メニューを開く" data-i18n-label="メニューを開く"
             aria-controls="sidebar"
             aria-expanded="false"
         >
@@ -24,7 +24,7 @@
 
         <a href="./" id="wiki-name">Wiki</a>
 
-        <a href="./?page=all" class="header-articles">
+        <a href="./?page=all" class="header-articles" data-i18n="記事一覧">
             記事一覧
         </a>
 
@@ -32,10 +32,10 @@
             <input
                 id="search"
                 type="search"
-                placeholder="記事を検索..."
+                placeholder="記事を検索..." data-i18n-placeholder="記事を検索..."
                 autocomplete="off"
                 role="combobox"
-                aria-label="記事を検索"
+                aria-label="記事を検索" data-i18n-label="記事を検索"
                 aria-autocomplete="list"
                 aria-controls="search-options"
                 aria-expanded="false"
@@ -52,39 +52,47 @@
         id="toc-toggle"
         class="mobile-toc-button"
         type="button"
-        aria-label="目次を開く"
+        aria-label="目次を開く" data-i18n-label="目次を開く"
         aria-controls="toc-panel"
         aria-expanded="false"
         hidden
     >
-        目次
+        <span data-i18n="目次">目次</span>
     </button>
     </header>
 
     <div class="wiki-layout">
         <aside id="sidebar" class="wiki-sidebar">
             <nav>
-                <h2>ナビゲーション</h2>
+                <h2 data-i18n="ナビゲーション">ナビゲーション</h2>
 
-                <a href="./">ホーム</a>
-                <a href="?page=all">記事一覧</a>
+                <a href="./" data-i18n="ホーム">ホーム</a>
+                <a href="?page=all" data-i18n="記事一覧">記事一覧</a>
             </nav>
 
             <section>
-                <h2>タグ</h2>
+                <h2 data-i18n="タグ">タグ</h2>
 
                 <div id="sidebar-tags"></div>
             </section>
 
+            <section class="language-settings">
+                <label for="language-select" data-i18n="表示言語">表示言語</label>
+                <select id="language-select">
+                    <option value="ja" lang="ja">日本語</option>
+                    <option value="en" lang="en">English</option>
+                </select>
+            </section>
+
             <section class="wiki-stats">
-                <h2>Wiki情報</h2>
+                <h2 data-i18n="Wiki情報">Wiki情報</h2>
 
                 <p>
-                    <span id="article-count">0</span> 記事
+                    <span id="article-count">0</span> <span data-i18n="記事">記事</span>
                 </p>
 
                 <p>
-                    <span id="tag-count">0</span> タグ
+                    <span id="tag-count">0</span> <span data-i18n="タグ">タグ</span>
                 </p>
             </section>
         </aside>

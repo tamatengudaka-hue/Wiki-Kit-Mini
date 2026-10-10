@@ -1,5 +1,7 @@
 # Wiki Kit Mini
 
+**日本語** | [English](README.en.md)
+
 Markdownで手軽に作れる、小規模な個人Wiki向けの軽量Wikiソフトウェアです。
 
 > Wikiは欲しい。  
@@ -46,6 +48,7 @@ GitHub Pagesで実際に動作しているWiki Kit Miniを試せます。
 - PC向け3カラムレイアウト
 - モバイル対応
 - ダークモード（OS設定への追従・手動切り替え）
+- 日本語・英語UIと任意の記事翻訳
 - カスタムHome
 - カスタム未作成記事ページ
 - Go製の簡易Webサーバー
@@ -98,14 +101,18 @@ GitHub Pagesのプロジェクトサイトなど、サブディレクトリ配�
 ├─ server.go
 ├─ LICENSE
 ├─ README.md
+├─ README.en.md
 │
 ├─ content/
 │  ├─ articles.json
 │  ├─ images/
+│  ├─ en/
 │  └─ *.md
 │
 ├─ src/
 │  ├─ main.js
+│  ├─ i18n.js
+│  ├─ theme.js
 │  └─ style.css
 │
 ├─ system/
@@ -274,6 +281,7 @@ python3 tests/ui_regressions.py
 python3 tests/code_blocks.py
 python3 tests/themes.py
 python3 tests/navigation_search.py
+python3 tests/languages.py
 ```
 
 Chromiumの場所が異なる場合は `CHROMIUM_PATH` を指定してください
@@ -523,6 +531,55 @@ PCでは右側に表示され、スクロール位置に応じて現在の見出
 保存が禁止されている場合でも、そのページ内での切り替えは利用できます。
 記事や `config.json` に配色の設定を記述する必要はありません。
 
+### 表示言語と記事翻訳
+
+ルートの `config.json` に `"language": "en"` を指定すると、初回は英語で表示します。
+`"ja"` は日本語です。未指定・未対応の値は日本語になります。
+閲覧者が以前選んだ言語は作者の初期設定より優先します。ブラウザの言語による自動判定は行いません。
+
+閲覧者はナビゲーションメニュー内の「表示言語」から切り替えられます。
+UIと記事はURLを変えずに更新され、選択はブラウザに保存します。
+保存が禁止されている場合でも、そのページ内での切り替えは利用できます。
+
+翻訳したい記事だけ `content/articles.json` に `translations` を追加します。
+
+```json
+{
+    "id": "welcome",
+    "title": "Welcome",
+    "file": "welcome.md",
+    "translations": {
+        "en": {
+            "title": "Welcome",
+            "file": "en/welcome.md"
+        }
+    },
+    "tags": ["Guide"]
+}
+```
+
+- 翻訳の `file` は必須、`title` は任意です。未指定のタイトルは元の記事名を使います。
+- 各パスは `content/` を基準にします。分割記事は英語版の `config.json` を指定できます。
+- 翻訳が登録されていない言語では元の記事を表示します。
+- 登録された翻訳ファイルの取得失敗はエラーを表示します。
+- 同じ記事ID・URLを維持し、翻訳後のタイトルでもWikiリンクを解決します。
+- 検索は現在の表示言語の本文を使います。タグとWiki名は作者が指定した内容のままです。
+- 言語ごとの分割設定にも最大5ファイル・各行2ファイルの制限が適用されます。
+- 見出し名が翻訳される場合、見出しアンカーは言語によって異なることがあります。
+
+Welcomeと分割記事サンプルには、`content/en/` に英語版を同梱しています。
+記事本文を自動翻訳する外部サービスは使用しません。
+
+未作成記事のテンプレートも言語ごとに指定できます。
+
+```json
+"notFoundTranslations": {
+    "en": "./system/en/not-found.md"
+}
+```
+
+未指定の言語は元の `notFound` を使います。
+
 ### Wikiの設定
 
 Wiki全体の設定は `config.json` で行います。
@@ -531,6 +588,7 @@ Wiki全体の設定は `config.json` で行います。
 {
     "name": "My Wiki",
     "home": "auto",
+    "language": "ja",
     "notFound": "./system/not-found.md"
 }
 ```
