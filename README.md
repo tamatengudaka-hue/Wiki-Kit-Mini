@@ -172,8 +172,8 @@ Wiki上で表示される記事名です。
 
 ```json
 {
-    "title": "夕焼けの宣伝茶亭",
-    "file": "chatei.md",
+    "title": "開発者コミュニティ",
+    "file": "community.md",
     "tags": ["Discord"]
 }
 ```

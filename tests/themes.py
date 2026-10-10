@@ -21,7 +21,7 @@ with sync_playwright() as p:
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.goto(BASE)
+    page.goto(BASE + '/?page=Welcome')
     expect(page.locator('#article h1')).to_have_text('Wiki Kit Miniへようこそ')
     expect(page.locator('html')).to_have_attribute('data-theme', 'dark')
     expect(page.locator('#theme-label')).to_have_text('自動')
@@ -81,7 +81,7 @@ with sync_playwright() as p:
     blocked.add_init_script('''Object.defineProperty(window, 'localStorage', { get() { throw new Error('Storage blocked'); } });''')
     tab = blocked.new_page()
     tab.on('pageerror', lambda error: errors.append(str(error)))
-    tab.goto(BASE)
+    tab.goto(BASE + '/?page=Welcome')
     expect(tab.locator('#article h1')).to_have_text('Wiki Kit Miniへようこそ')
     expect(tab.locator('html')).to_have_attribute('data-theme', 'dark')
     tab.locator('#theme-toggle').click()
@@ -89,7 +89,7 @@ with sync_playwright() as p:
     invalid = browser.new_context(color_scheme='dark')
     invalid.add_init_script(f"localStorage.setItem('{KEY}', 'invalid');")
     tab = invalid.new_page()
-    tab.goto(BASE)
+    tab.goto(BASE + '/?page=Welcome')
     expect(tab.locator('#theme-label')).to_have_text('自動')
     expect(tab.locator('html')).to_have_attribute('data-theme', 'dark')
     assert not errors, errors
