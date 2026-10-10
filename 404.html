@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 — ページが見つかりません</title>
+    <script>
+        try {
+            const theme = localStorage.getItem("wiki-kit-mini-theme");
+            if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        } catch { /* Storage is optional. */ }
+    </script>
+    <style>
+        :root { color-scheme: light; --background: #fff; --text: #202122; --link: #3366cc; }
+        :root[data-theme="dark"] { color-scheme: dark; --background: #171b21; --text: #e6e9ef; --link: #8ab4ff; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) { color-scheme: dark; --background: #171b21; --text: #e6e9ef; --link: #8ab4ff; }
+        }
+        body { margin: 0; padding: 24px; min-height: 100vh; box-sizing: border-box; display: grid; place-items: center; font-family: system-ui, sans-serif; line-height: 1.7; background: var(--background); color: var(--text); }
+        main { max-width: 36rem; text-align: center; overflow-wrap: anywhere; }
+        h1 { margin: 0; font-size: 4rem; line-height: 1.2; }
+        a { color: var(--link); }
+        a:focus-visible { outline: 2px solid var(--link); outline-offset: 4px; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>404</h1>
+        <p id="message">ページが見つかりませんでした。</p>
+        <a id="home" href="/">ホームへ戻る</a>
+    </main>
+    <script>
+        (async () => {
+            let language;
+            try { language = localStorage.getItem("wiki-kit-mini-language"); } catch { /* Optional. */ }
+            const applyLanguage = value => {
+                const english = value === "en";
+                document.documentElement.lang = english ? "en" : "ja";
+                document.title = english ? "404 — Page not found" : "404 — ページが見つかりません";
+                document.getElementById("message").textContent = english ? "The page could not be found." : "ページが見つかりませんでした。";
+                document.getElementById("home").textContent = english ? "Back to home" : "ホームへ戻る";
+            };
+            applyLanguage(language);
+            // A host may serve this page at a missing nested URL. Find the site root
+            // so the home link also works for GitHub Pages project subdirectories.
+            let directory = location.pathname.slice(0, location.pathname.lastIndexOf("/") + 1);
+            while (directory) {
+                try {
+                    const response = await fetch(directory + "config.json");
+                    if (response.ok) {
+                        const config = await response.json();
+                        if (config && typeof config.name === "string") {
+                            document.getElementById("home").href = directory;
+                            applyLanguage(language === "ja" || language === "en" ? language : config.language);
+                            return;
+                        }
+                    }
+                } catch { /* Try the parent directory; keep the fallback usable. */ }
+                if (directory === "/") break;
+                directory = directory.slice(0, -1).slice(0, directory.slice(0, -1).lastIndexOf("/") + 1);
+            }
+        })();
+    </script>
+</body>
+</html>
