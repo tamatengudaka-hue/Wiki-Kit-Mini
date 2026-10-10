@@ -22,6 +22,15 @@ const tocToggle = document.getElementById("toc-toggle");
 
 const mobileBackdrop = document.getElementById("mobile-backdrop");
 
+// 折り返しや画面幅に応じて、見出しを固定ヘッダーの下にスクロールする。
+const siteHeader = document.querySelector(".site-header");
+const headerObserver = new ResizeObserver(() => {
+    document.documentElement.style.setProperty(
+        "--header-height", `${siteHeader.getBoundingClientRect().height}px`
+    );
+});
+headerObserver.observe(siteHeader);
+
 let searchIndex = null;
 let searchRequestId = 0;
 let tocScrollHandler = null;
@@ -54,18 +63,6 @@ function renderMarkdown(markdown) {
             html: true
         }
     });
-}
-
-// 記事ルートの作成
-
-function createArticleRoot(markdown, articles) {
-    const root = document.createElement("div");
-
-    root.innerHTML = renderMarkdown(markdown);
-
-    createWikiLinks(root, articles);
-
-    return root;
 }
 
 // URL
@@ -139,33 +136,120 @@ async function loadArticleList() {
     return await response.json();
 }
 
-async function buildSearchIndex(articles) {
-    if (searchIndex) {
-        return searchIndex;
+// 記事の取得を表示・検索・関連リンクで共有する。
+const articleLoads = new Map();
+
+function contentUrl(path, base = new URL("./content/", location.href)) {
+    if (typeof path !== "string" || !path || path.trim() !== path
+        || /[\\:%?#]/.test(path)
+        || path.startsWith("/")
+        || path.split("/").some(part => !part || part === "." || part === "..")) {
+        throw new Error(`記事のファイルパスが不正です: ${path}`);
     }
+    return new URL(path.split("/").map(encodeURIComponent).join("/"), base);
+}
 
-    searchIndex = await Promise.all(
-        articles.map(async item => {
-            const response = await fetch(
-                `./content/${encodeURIComponent(item.file)}`
-            );
+async function fetchArticleFile(url) {
+    let response;
+    try {
+        response = await fetch(url);
+    } catch {
+        throw new Error(`${decodeURIComponent(url.pathname)} の読み込みに失敗しました（通信エラー）`);
+    }
+    if (!response.ok) {
+        throw new Error(`${decodeURIComponent(url.pathname)} の読み込みに失敗しました（HTTP ${response.status}）`);
+    }
+    return response.text();
+}
 
-            if (!response.ok) {
-                return {
-                    title: item.title,
-                    content: "",
-                    tags: item.tags ?? []
-                };
+function loadArticleData(item) {
+    if (!articleLoads.has(item.file)) {
+        const promise = (async () => {
+            const url = contentUrl(item.file);
+            if (url.pathname.endsWith(".md")) {
+                return { split: false, rows: [[{ markdown: await fetchArticleFile(url), url }]] };
             }
+            if (!url.pathname.endsWith("/config.json")) {
+                throw new Error("記事は .md またはディレクトリ内の config.json を指定してください");
+            }
+            let layout;
+            const text = await fetchArticleFile(url);
+            try {
+                layout = JSON.parse(text);
+            } catch {
+                throw new Error(`${item.file}: JSONの形式が不正です`);
+            }
+            if (!layout || !Array.isArray(layout.rows) || !layout.rows.length
+                || layout.rows.some(row => !Array.isArray(row) || row.length < 1 || row.length > 2)) {
+                throw new Error(`${item.file}: rows は1〜2ファイルの行を並べた空でない配列にしてください`);
+            }
+            const files = layout.rows.flat();
+            if (files.length > 5) {
+                throw new Error(`${item.file}: 分割記事は最大5ファイルです`);
+            }
+            const urls = files.map(file => {
+                const partUrl = contentUrl(file, new URL("./", url));
+                if (!partUrl.pathname.endsWith(".md")) {
+                    throw new Error(`${item.file}: Markdown（.md）のみ指定できます`);
+                }
+                return partUrl;
+            });
+            if (new Set(urls.map(url => url.href)).size !== urls.length) {
+                throw new Error(`${item.file}: 同じMarkdownファイルを重複して指定できません`);
+            }
+            const parts = await Promise.all(urls.map(async url => ({
+                url, markdown: await fetchArticleFile(url)
+            })));
+            let offset = 0;
+            return { split: true, rows: layout.rows.map(row => {
+                const result = parts.slice(offset, offset + row.length);
+                offset += row.length;
+                return result;
+            }) };
+        })();
+        articleLoads.set(item.file, promise);
+        promise.catch(() => articleLoads.delete(item.file));
+    }
+    return articleLoads.get(item.file);
+}
 
-            return {
-                title: item.title,
-                content: await response.text(),
-                tags: item.tags ?? []
-            };
-        })
-    );
+function createPartRoot(part, articles, split) {
+    const root = document.createElement("div");
+    root.innerHTML = renderMarkdown(part.markdown);
+    if (split) {
+        for (const element of root.querySelectorAll("a[href], img[src]")) {
+            const attribute = element.tagName === "IMG" ? "src" : "href";
+            const value = element.getAttribute(attribute);
+            // Wikiのクエリリンクと見出しリンクは記事URLを基準にする。
+            if (value && !/^(?:[a-z][a-z0-9+.-]*:|\/|#|\?)/i.test(value)) {
+                element.setAttribute(attribute, new URL(value, part.url).href);
+            }
+        }
+    }
+    createWikiLinks(root, articles);
+    return root;
+}
 
+function createIndexedRoot(item, articles) {
+    const root = document.createElement("div");
+    for (const part of item.parts) {
+        root.appendChild(createPartRoot(part, articles, item.split));
+    }
+    return root;
+}
+
+async function buildSearchIndex(articles) {
+    if (searchIndex) return searchIndex;
+    searchIndex = await Promise.all(articles.map(async item => {
+        try {
+            const data = await loadArticleData(item);
+            const parts = data.rows.flat();
+            return { ...item, split: data.split, parts,
+                content: parts.map(part => part.markdown).join("\n\n"), tags: item.tags ?? [] };
+        } catch (error) {
+            return { ...item, parts: [], content: "", tags: item.tags ?? [], error: error.message };
+        }
+    }));
     return searchIndex;
 }
 
@@ -355,12 +439,19 @@ function setupSearch(articles) {
             return;
         }
 
-        const matches = index.filter(item =>
+        const failures = index.filter(item => item.error);
+        if (failures.length) {
+            const warning = document.createElement("p");
+            warning.textContent = failures.map(item => `${item.title}: ${item.error}`).join(" / ");
+            searchResults.appendChild(warning);
+        }
+
+        const matches = index.filter(item => !item.error && (
             item.title.toLowerCase().includes(query)
             || item.content.toLowerCase().includes(query)
             || item.tags.some(tag =>
                 tag.toLowerCase().includes(query)
-            )
+            ))
         );
 
         for (const item of matches) {
@@ -453,6 +544,19 @@ function createImageCaptions() {
 }
 
 
+// 横幅の広い表は記事全体ではなく表の中でスクロールする。
+function createTableContainers() {
+    for (const table of article.querySelectorAll("table")) {
+        const container = document.createElement("div");
+        container.className = "article-table";
+        container.tabIndex = 0;
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", "表（横にスクロールできます）");
+        table.replaceWith(container);
+        container.appendChild(table);
+    }
+}
+
 // コード
 
 function highlightCode() {
@@ -517,18 +621,18 @@ function createTableOfContents() {
     title.textContent = "目次";
 
     const list = document.createElement("ul");
-    const idCounts = new Map();
+    const usedIds = new Set(
+        [...document.querySelectorAll("[id]")]
+            .filter(element => !headings.includes(element))
+            .map(element => element.id)
+    );
 
     for (const heading of headings) {
-        const baseId = heading.textContent.trim();
-        const count = (idCounts.get(baseId) ?? 0) + 1;
-
-        idCounts.set(baseId, count);
-
-        const id =
-            count === 1
-                ? baseId
-                : `${baseId}-${count}`;
+        const baseId = heading.textContent.trim() || "section";
+        let id = baseId;
+        let count = 1;
+        while (usedIds.has(id)) id = `${baseId}-${++count}`;
+        usedIds.add(id);
 
         heading.id = id;
 
@@ -553,7 +657,7 @@ function createTableOfContents() {
     ];
 
     tocScrollHandler = () => {
-        const headerOffset = 100;
+        const headerOffset = siteHeader.getBoundingClientRect().bottom + 16;
         let activeIndex = 0;
 
         // 画面上部を通過した最後の見出しを選択
@@ -608,10 +712,7 @@ async function createLinkInfo(title, articles) {
 
     const links = [];
 
-    const currentRoot = createArticleRoot(
-        current.content,
-        articles
-    );
+    const currentRoot = createIndexedRoot(current, articles);
 
     // この記事から他の記事へのWikiリンク
     const outgoingWikiLinks =
@@ -641,7 +742,9 @@ async function createLinkInfo(title, articles) {
         const href =
             element.getAttribute("href") ?? "";
 
-        if (!/^https?:\/\//i.test(href)) {
+        if (element.classList.contains("wiki-link")
+            || !/^https?:\/\//i.test(href)
+            || new URL(href).origin === location.origin) {
             continue;
         }
 
@@ -660,10 +763,7 @@ async function createLinkInfo(title, articles) {
             continue;
         }
 
-        const root = createArticleRoot(
-            item.content,
-            articles
-        );
+        const root = createIndexedRoot(item, articles);
 
         const linksHere = [
             ...root.querySelectorAll(
@@ -892,32 +992,36 @@ async function showArticle(
         return;
     }
 
-    const response = await fetch(
-        `./content/${encodeURIComponent(data.file)}`
-    );
-
-    if (!response.ok) {
-        await showNotFound(
-            title,
-            articles,
-            config
-        );
-
-        return;
+    const loaded = await loadArticleData(data);
+    article.replaceChildren();
+    if (loaded.split) {
+        const heading = document.createElement("h1");
+        heading.textContent = title;
+        article.appendChild(heading);
+        const layout = document.createElement("div");
+        layout.className = "split-article";
+        for (const parts of loaded.rows) {
+            const row = document.createElement("div");
+            row.className = "split-article-row";
+            row.classList.toggle("split-article-two-columns", parts.length === 2);
+            for (const part of parts) {
+                const section = createPartRoot(part, articles, true);
+                section.className = "split-article-section";
+                row.appendChild(section);
+            }
+            layout.appendChild(row);
+        }
+        article.appendChild(layout);
+    } else {
+        article.appendChild(createPartRoot(loaded.rows[0][0], articles, false));
     }
-
-    const markdown = await response.text();
-
-    article.innerHTML = renderMarkdown(markdown);
-
-    createWikiLinks(article, articles);
     createArticleTags(title, articles);
     createImageCaptions();
+    createTableContainers();
     highlightCode();
     createCodeCopyButtons();
 
-    await createLinkInfo(title, articles);
-
+    // 別の記事の索引読み込みを待たずに目次と見出しリンクを利用可能にする。
     createTableOfContents();
 
     const hashTarget = getHashTarget();
@@ -933,7 +1037,8 @@ async function showArticle(
         }
     }
 
-document.title = `${title} - ${config.name}`;
+    document.title = `${title} - ${config.name}`;
+    await createLinkInfo(title, articles);
 }
 
 
@@ -1208,6 +1313,8 @@ function closeMobilePanels() {
     sidebar.classList.remove("open");
     tocPanel.classList.remove("open");
     mobileBackdrop.classList.remove("show");
+    sidebarToggle.setAttribute("aria-expanded", "false");
+    tocToggle.setAttribute("aria-expanded", "false");
 }
 
 sidebarToggle.addEventListener("click", () => {
@@ -1215,6 +1322,8 @@ sidebarToggle.addEventListener("click", () => {
         sidebar.classList.toggle("open");
 
     tocPanel.classList.remove("open");
+    sidebarToggle.setAttribute("aria-expanded", String(open));
+    tocToggle.setAttribute("aria-expanded", "false");
 
     mobileBackdrop.classList.toggle(
         "show",
@@ -1227,6 +1336,8 @@ tocToggle.addEventListener("click", () => {
         tocPanel.classList.toggle("open");
 
     sidebar.classList.remove("open");
+    tocToggle.setAttribute("aria-expanded", String(open));
+    sidebarToggle.setAttribute("aria-expanded", "false");
 
     mobileBackdrop.classList.toggle(
         "show",
@@ -1239,6 +1350,30 @@ mobileBackdrop.addEventListener(
     closeMobilePanels
 );
 
+
+tocPanel.addEventListener("click", event => {
+    if (event.target.closest("a")) closeMobilePanels();
+});
+
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+        const toggle = tocPanel.classList.contains("open") ? tocToggle
+            : sidebar.classList.contains("open") ? sidebarToggle : null;
+        closeMobilePanels();
+        toggle?.focus();
+        searchRequestId++;
+        searchResults.replaceChildren();
+    }
+});
+
+document.addEventListener("pointerdown", event => {
+    if (!event.target.closest(".search-area")) {
+        searchRequestId++;
+        searchResults.replaceChildren();
+    }
+});
+
+window.matchMedia("(max-width: 900px)").addEventListener("change", closeMobilePanels);
 
 // 起動
 
@@ -1282,8 +1417,10 @@ async function main() {
 main().catch(error => {
     console.error(error);
 
-    article.innerHTML = `
-        <h1>読み込みに失敗しました</h1>
-        <p>Wikiを読み込めませんでした。</p>
-    `;
+    hideTableOfContents();
+    const heading = document.createElement("h1");
+    heading.textContent = "読み込みに失敗しました";
+    const message = document.createElement("p");
+    message.textContent = error.message;
+    article.replaceChildren(heading, message);
 });

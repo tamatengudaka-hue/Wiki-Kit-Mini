@@ -24,6 +24,7 @@
 
 html {
     scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--header-height, 58px) + 16px);
 
     color: var(--text);
     font-family:
@@ -117,6 +118,9 @@ body {
     flex-direction: column;
 
     width: 100%;
+    max-height: calc(100dvh - var(--header-height, 58px) - 16px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
 
     background: var(--surface);
     border: 1px solid var(--border-strong);
@@ -178,6 +182,38 @@ body {
 
 #article {
     min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.split-article {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.split-article-row {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.split-article-two-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.split-article-section {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.split-article-section img {
+    max-width: 100%;
+    height: auto;
+}
+
+@media (max-width: 900px) {
+    .split-article-two-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 #article p {
@@ -457,6 +493,16 @@ body {
 }
 
 
+.article-table {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-wrap: normal;
+}
+
+.article-table:focus-visible {
+    outline: 2px solid var(--link);
+}
+
 /* 画像 */
 
 .article-image {
@@ -466,8 +512,7 @@ body {
     margin: 24px 0;
 }
 
-.article-image img,
-#article > img {
+#article img {
     display: block;
 
     max-width: min(100%, 700px);
@@ -642,6 +687,7 @@ body {
 }
 
 .toc-panel a {
+    overflow-wrap: anywhere;
     position: relative;
     display: block;
 
@@ -752,6 +798,7 @@ body {
 
     .wiki-sidebar,
     .toc-panel {
+        visibility: hidden;
         position: fixed;
 
         top: 0;
@@ -782,6 +829,7 @@ body {
 
     .wiki-sidebar.open,
     .toc-panel.open {
+        visibility: visible;
         transform: translateX(0);
     }
 
@@ -798,5 +846,26 @@ body {
 
     .toc-panel[hidden] {
         visibility: hidden;
+    }
+}
+
+/* 狭い画面でも検索欄を操作できる幅にする。 */
+@media (max-width: 600px) {
+    .site-header {
+        flex-wrap: wrap;
+    }
+
+    #wiki-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .search-area {
+        order: 1;
+        flex-basis: 100%;
+        min-width: 0;
     }
 }
