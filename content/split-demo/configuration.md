@@ -20,8 +20,11 @@
 
 ```json
 {
+    "id": "split-demo",
     "title": "分割記事サンプル",
     "file": "split-demo/config.json",
     "tags": ["Guide", "サンプル"]
 }
 ```
+
+`id` を変えなければ、記事のタイトルを変えても `?page=split-demo` で開けます。

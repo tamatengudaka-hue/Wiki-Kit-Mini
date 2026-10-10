@@ -110,6 +110,6 @@ with sync_playwright() as p:
     expect(page.locator('#article h1')).to_have_text('Wiki Kit Miniへようこそ')
     page.locator('#search').fill('Welcome')
     expect(page.locator('#search-results strong')).to_have_text('Welcome')
-    expect(page.locator('#search-results p')).to_contain_text('features.md')
+    expect(page.locator('#search-results .search-warning')).to_contain_text('features.md')
     print('PASS: invalid layouts/paths rejected before Markdown fetch; missing files diagnosed; failed articles do not block valid articles')
     browser.close()

@@ -34,9 +34,14 @@
                 type="search"
                 placeholder="記事を検索..."
                 autocomplete="off"
+                role="combobox"
+                aria-label="記事を検索"
+                aria-autocomplete="list"
+                aria-controls="search-options"
+                aria-expanded="false"
             >
 
-            <div id="search-results"></div>
+            <div id="search-results" hidden></div>
         </div>
 
         <button id="theme-toggle" class="theme-toggle" type="button">

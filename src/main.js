@@ -31,7 +31,9 @@ const headerObserver = new ResizeObserver(() => {
 });
 headerObserver.observe(siteHeader);
 
+let articleEntries = [];
 let searchIndex = null;
+let activeSearchResult = -1;
 let searchRequestId = 0;
 let tocScrollHandler = null;
 
@@ -100,7 +102,8 @@ function createInternalUrl({
     url.hash = "";
 
     if (page) {
-        url.searchParams.set("page", page);
+        const target = page === "all" ? null : findArticle(articleEntries, page);
+        url.searchParams.set("page", target?.id ?? page);
     }
 
     if (tag) {
@@ -133,7 +136,40 @@ async function loadArticleList() {
         throw new Error("記事一覧の読み込みに失敗しました");
     }
 
-    return await response.json();
+    const articles = await response.json();
+    validateArticleList(articles);
+    return articles;
+}
+
+function findArticle(articles, reference) {
+    return articles.find(item => item.id === reference)
+        ?? articles.find(item => item.title === reference || item.aliases?.includes(reference));
+}
+
+function validateArticleList(articles) {
+    if (!Array.isArray(articles)) throw new Error("記事一覧は配列にしてください");
+    const references = new Map();
+    for (const item of articles) {
+        if (!item || typeof item.title !== "string" || !item.title.trim()
+            || typeof item.file !== "string" || !item.file) {
+            throw new Error("記事には空でない title と file が必要です");
+        }
+        if (item.id !== undefined && (typeof item.id !== "string"
+            || !/^[a-z0-9][a-z0-9_-]*$/.test(item.id))) {
+            throw new Error(`${item.title}: id は小文字の英数字・ハイフン・アンダースコアで指定してください`);
+        }
+        if (item.aliases !== undefined && (!Array.isArray(item.aliases)
+            || item.aliases.some(alias => typeof alias !== "string" || !alias.trim()))) {
+            throw new Error(`${item.title}: aliases は空でない文字列の配列にしてください`);
+        }
+        for (const reference of [item.title, item.id, ...(item.aliases ?? [])].filter(value => value !== undefined)) {
+            if (reference === "all") throw new Error(`${item.title}: all は記事一覧用の予約名です`);
+            if (references.has(reference) && references.get(reference) !== item) {
+                throw new Error(`記事のID・タイトル・別名が重複しています: ${reference}`);
+            }
+            references.set(reference, item);
+        }
+    }
 }
 
 // 記事の取得を表示・検索・関連リンクで共有する。
@@ -240,7 +276,7 @@ function createIndexedRoot(item, articles) {
 
 async function buildSearchIndex(articles) {
     if (searchIndex) return searchIndex;
-    searchIndex = await Promise.all(articles.map(async item => {
+    searchIndex = Promise.all(articles.map(async item => {
         try {
             const data = await loadArticleData(item);
             const parts = data.rows.flat();
@@ -335,17 +371,17 @@ function createWikiLinks(root, articles) {
                 continue;
             }
 
+            const destination = findArticle(articles, pageName);
+            const resolvedTitle = destination?.title ?? pageName;
             const label =
                 displayName?.trim()
                 || (
                     heading
-                        ? `${pageName}#${heading}`
-                        : pageName
+                        ? `${resolvedTitle}#${heading}`
+                        : resolvedTitle
                 );
 
-            const exists = articles.some(
-                item => item.title === pageName
-            );
+            const exists = Boolean(destination);
 
             const link =
                 document.createElement("a");
@@ -358,7 +394,7 @@ function createWikiLinks(root, articles) {
 
             // 関連リンク抽出にも使用
             link.classList.add("wiki-link");
-            link.dataset.wikiTitle = pageName;
+            link.dataset.wikiTitle = resolvedTitle;
 
             if (!exists) {
                 link.classList.add(
@@ -419,67 +455,134 @@ function createSearchSnippet(content, query) {
 
 // 検索インデックスの構築
 
+function clearSearchResults() {
+    activeSearchResult = -1;
+    searchResults.replaceChildren();
+    searchResults.hidden = true;
+    search.setAttribute("aria-expanded", "false");
+    search.removeAttribute("aria-activedescendant");
+}
+
+function selectSearchResult(index) {
+    const links = [...searchResults.querySelectorAll("a[role=option]")];
+    if (!links.length) return;
+    activeSearchResult = (index + links.length) % links.length;
+    links.forEach((link, position) => {
+        link.setAttribute("aria-selected", String(position === activeSearchResult));
+    });
+    const selected = links[activeSearchResult];
+    search.setAttribute("aria-activedescendant", selected.id);
+    // ドロップダウンだけをスクロールし、本文の位置を維持する。
+    const top = selected.offsetTop;
+    const bottom = top + selected.offsetHeight;
+    if (top < searchResults.scrollTop) searchResults.scrollTop = top;
+    else if (bottom > searchResults.scrollTop + searchResults.clientHeight) {
+        searchResults.scrollTop = bottom - searchResults.clientHeight;
+    }
+}
+
 function setupSearch(articles) {
-    search.addEventListener("input", async () => {
-        const requestId = ++searchRequestId;
-        const query =
-            search.value.trim().toLowerCase();
-
-        searchResults.innerHTML = "";
-
-        if (!query) {
+    let composing = false;
+    search.addEventListener("compositionstart", () => {
+        composing = true;
+        searchRequestId++;
+        clearSearchResults();
+    });
+    search.addEventListener("compositionend", () => {
+        composing = false;
+        search.dispatchEvent(new Event("input"));
+    });
+    const reopenSearch = () => {
+        if (!composing && searchResults.hidden && search.value.trim()) search.dispatchEvent(new Event("input"));
+    };
+    search.addEventListener("focus", reopenSearch);
+    search.addEventListener("click", reopenSearch);
+    search.addEventListener("keydown", async event => {
+        if (composing || event.isComposing || event.keyCode === 229) return;
+        if (event.key === "Escape") {
+            // 検索文字列を消すブラウザの既定動作を抑え、候補だけを閉じる。
+            event.preventDefault();
             return;
         }
-
-        const index =
+        if (searchResults.hidden && search.value.trim()
+            && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+            event.preventDefault();
+            reopenSearch();
+            const requestId = searchRequestId;
             await buildSearchIndex(articles);
-
-        // 待機中に別の検索が始まった場合は破棄
-        if (requestId !== searchRequestId) {
-            return;
+            if (requestId !== searchRequestId) return;
         }
+        const links = [...searchResults.querySelectorAll("a[role=option]")];
+        if (!links.length || searchResults.hidden) return;
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            selectSearchResult(activeSearchResult === -1
+                ? (event.key === "ArrowDown" ? 0 : links.length - 1)
+                : activeSearchResult + (event.key === "ArrowDown" ? 1 : -1));
+        } else if (event.key === "Enter") {
+            event.preventDefault();
+            links[activeSearchResult === -1 ? 0 : activeSearchResult].click();
+        }
+    });
 
+    search.addEventListener("input", async event => {
+        const requestId = ++searchRequestId;
+        const query = search.value.trim().toLowerCase();
+        clearSearchResults();
+        if (!query || composing || event.isComposing) return;
+        const index = await buildSearchIndex(articles);
+        if (requestId !== searchRequestId) return;
+        clearSearchResults();
         const failures = index.filter(item => item.error);
         if (failures.length) {
             const warning = document.createElement("p");
             warning.textContent = failures.map(item => `${item.title}: ${item.error}`).join(" / ");
+            warning.className = "search-warning";
+            warning.setAttribute("role", "status");
             searchResults.appendChild(warning);
         }
-
         const matches = index.filter(item => !item.error && (
             item.title.toLowerCase().includes(query)
+            || item.id?.toLowerCase().includes(query)
+            || item.aliases?.some(alias => alias.toLowerCase().includes(query))
             || item.content.toLowerCase().includes(query)
-            || item.tags.some(tag =>
-                tag.toLowerCase().includes(query)
-            ))
-        );
-
-        for (const item of matches) {
+            || item.tags.some(tag => tag.toLowerCase().includes(query))
+        ));
+        const options = document.createElement("div");
+        options.id = "search-options";
+        options.setAttribute("role", "listbox");
+        options.setAttribute("aria-label", "検索結果");
+        searchResults.appendChild(options);
+        const status = document.createElement("p");
+        status.className = "search-status";
+        status.setAttribute("role", "status");
+        status.textContent = matches.length
+            ? `${matches.length}件の記事が見つかりました`
+            : "一致する記事が見つかりませんでした";
+        searchResults.appendChild(status);
+        matches.forEach((item, position) => {
             const link = document.createElement("a");
-            link.href = createInternalUrl({
-                page: item.title
-            });
-
+            link.href = createInternalUrl({ page: item.id ?? item.title });
+            link.id = `search-option-${position}`;
+            link.setAttribute("role", "option");
+            link.setAttribute("aria-selected", "false");
+            link.tabIndex = -1;
+            link.addEventListener("pointermove", () => selectSearchResult(position));
             const title = document.createElement("strong");
             title.textContent = item.title;
-
             link.appendChild(title);
-
-            const snippet = createSearchSnippet(
-                item.content,
-                query
-            );
-
+            const snippet = createSearchSnippet(item.content, query);
             if (snippet) {
                 const description = document.createElement("span");
                 description.className = "search-snippet";
                 description.textContent = snippet;
-
                 link.appendChild(description);
             }
-
-            searchResults.appendChild(link);
-        }
+            options.appendChild(link);
+        });
+        searchResults.hidden = false;
+        searchResults.scrollTop = 0;
+        search.setAttribute("aria-expanded", "true");
     });
 }
 
@@ -635,7 +738,9 @@ function createTableOfContents() {
         const baseId = heading.textContent.trim() || "section";
         let id = baseId;
         let count = 1;
-        while (usedIds.has(id)) id = `${baseId}-${++count}`;
+        while (usedIds.has(id) || id === "search-options" || /^search-option-\d+$/.test(id)) {
+            id = `${baseId}-${++count}`;
+        }
         usedIds.add(id);
 
         heading.id = id;
@@ -982,9 +1087,7 @@ async function showArticle(
     articles,
     config
 ) {
-    const data = articles.find(
-        item => item.title === title
-    );
+    const data = findArticle(articles, title);
 
     if (!data) {
         await showNotFound(
@@ -996,6 +1099,10 @@ async function showArticle(
         return;
     }
 
+    title = data.title;
+    if (page && data.id && page !== data.id) {
+        history.replaceState(null, "", createInternalUrl({ page: data.id, heading: getHashTarget() }));
+    }
     const loaded = await loadArticleData(data);
     article.replaceChildren();
     if (loaded.split) {
@@ -1268,7 +1375,7 @@ async function showHome(articles, config) {
     // 1記事ならそのまま表示
     if (articles.length === 1) {
         await showArticle(
-            articles[0].title,
+            articles[0].id ?? articles[0].title,
             articles,
             config
         );
@@ -1360,20 +1467,27 @@ tocPanel.addEventListener("click", event => {
 });
 
 document.addEventListener("keydown", event => {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) {
         const toggle = tocPanel.classList.contains("open") ? tocToggle
             : sidebar.classList.contains("open") ? sidebarToggle : null;
         closeMobilePanels();
         toggle?.focus();
         searchRequestId++;
-        searchResults.replaceChildren();
+        clearSearchResults();
     }
 });
 
 document.addEventListener("pointerdown", event => {
     if (!event.target.closest(".search-area")) {
         searchRequestId++;
-        searchResults.replaceChildren();
+        clearSearchResults();
+    }
+});
+
+document.addEventListener("focusin", event => {
+    if (!event.target.closest(".search-area")) {
+        searchRequestId++;
+        clearSearchResults();
     }
 });
 
@@ -1385,6 +1499,7 @@ async function main() {
     const config = await loadConfig();
     const articles = await loadArticleList();
 
+    articleEntries = articles;
     wikiName.textContent = config.name;
 
     setupSearch(articles);
