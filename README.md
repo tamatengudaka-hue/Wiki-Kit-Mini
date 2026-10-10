@@ -266,6 +266,7 @@ go run server.go
 # 別のターミナルで実行
 python3 tests/split_articles.py
 python3 tests/ui_regressions.py
+python3 tests/code_blocks.py
 ```
 
 Chromiumの場所が異なる場合は `CHROMIUM_PATH` を指定してください

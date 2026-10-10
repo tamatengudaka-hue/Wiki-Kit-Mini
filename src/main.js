@@ -595,7 +595,11 @@ function createCodeCopyButtons() {
             }, 1500);
         });
 
-        block.appendChild(button);
+        // スクロールする本文とボタンを別要素にして、ボタンを右上に固定する。
+        const container = document.createElement("div");
+        container.className = "code-block";
+        block.replaceWith(container);
+        container.append(block, button);
     }
 }
 

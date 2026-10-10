@@ -363,17 +363,26 @@ body {
 
 /* コードブロック */
 
-#article pre {
+.code-block {
     position: relative;
-
-    overflow-x: auto;
-
     margin: 20px 0;
-    padding: 16px 18px;
-
     background: #f6f8fa;
     border: 1px solid var(--border);
     border-radius: 4px;
+    overflow: hidden;
+}
+
+#article pre {
+    overflow-x: auto;
+    margin: 20px 0;
+    padding: 16px 18px;
+    background: #f6f8fa;
+}
+
+#article .code-block > pre {
+    margin: 0;
+    /* コピー済みの表示でも本文に重ならない操作領域を確保する。 */
+    padding-top: 48px;
 }
 
 #article pre code,
