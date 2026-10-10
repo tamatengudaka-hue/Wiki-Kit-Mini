@@ -3,5 +3,10 @@
         "title": "Welcome",
         "file": "welcome.md",
         "tags": ["Guide"]
+    },
+    {
+        "title": "分割記事サンプル",
+        "file": "split-demo/config.json",
+        "tags": ["Guide", "サンプル"]
     }
 ]
